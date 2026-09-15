@@ -121,6 +121,10 @@ def workout_detail(workout_id):
     exercises = db().execute("SELECT * FROM exercises WHERE workout_id=? ORDER BY position", (workout_id,)).fetchall()
     return workout, [(ex, db().execute("SELECT * FROM sets WHERE exercise_id=? ORDER BY position", (ex["id"],)).fetchall()) for ex in exercises]
 
+def short_exercises(exercises):
+    # A quick session retains the main compound lifts and first accessory.
+    return exercises[:min(3, len(exercises))]
+
 @app.route("/")
 def home():
     pending = db().execute("SELECT * FROM workouts WHERE status='pending' ORDER BY id LIMIT 1").fetchone()
@@ -130,13 +134,19 @@ def home():
 @app.route("/workout/<int:workout_id>")
 def workout(workout_id):
     item, exercises = workout_detail(workout_id)
-    return render_template("workout.html", workout=item, exercises=exercises)
+    mode = request.args.get("mode", "long")
+    return render_template("workout.html", workout=item, exercises=short_exercises(exercises) if mode == "quick" else exercises, mode=mode)
 
 @app.route("/workout/<int:workout_id>/complete", methods=["POST"])
 def complete(workout_id):
     workout, exercises = workout_detail(workout_id)
     if workout["status"] == "complete": return redirect(url_for("history"))
-    for ex, _sets in exercises:
+    selected_ids = {int(value) for value in request.form.getlist("exercise-id")}
+    selected = [(ex, sets) for ex, sets in exercises if ex["id"] in selected_ids]
+    if not selected:
+        flash("Choose at least one exercise before completing.")
+        return redirect(url_for("workout", workout_id=workout_id))
+    for ex, _sets in selected:
         for number in range(1, ex["target_sets"] + 1):
             reps = request.form.get(f"reps-{ex['id']}-{number}", type=int)
             weight = request.form.get(f"weight-{ex['id']}-{number}", type=float)
@@ -155,6 +165,15 @@ def complete(workout_id):
 @app.route("/history")
 def history():
     workouts = db().execute("SELECT * FROM workouts WHERE status='complete' ORDER BY id DESC").fetchall()
-    return render_template("history.html", workouts=workouts)
+    exercise_names = db().execute("SELECT DISTINCT e.name FROM exercises e JOIN workouts w ON w.id=e.workout_id WHERE w.status='complete' ORDER BY e.name").fetchall()
+    return render_template("history.html", workouts=workouts, exercise_names=exercise_names)
+
+@app.route("/history/exercise")
+def exercise_history():
+    name = request.args.get("name", "")
+    rows = db().execute("""SELECT w.name AS workout_name, w.completed_at, s.position, s.reps, s.weight
+        FROM sets s JOIN exercises e ON e.id=s.exercise_id JOIN workouts w ON w.id=e.workout_id
+        WHERE w.status='complete' AND e.name=? ORDER BY w.id DESC, s.position""", (name,)).fetchall()
+    return render_template("exercise_history.html", name=name, rows=rows)
 
 if __name__ == "__main__": app.run(host="0.0.0.0", port=8000, debug=True)

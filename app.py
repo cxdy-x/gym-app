@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 from contextlib import closing
@@ -8,41 +9,24 @@ from flask import Flask, abort, flash, g, redirect, render_template, request, ur
 
 DATA_DIR = Path(os.environ.get("GYM_DATA_DIR", "./data"))
 DATABASE = DATA_DIR / "gym.db"
+ROUTINE_PATH = Path(os.environ.get("GYM_ROUTINE_FILE", "./routine.json"))
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-this-if-exposed-outside-your-home-network")
 
-ROUTINE = [
-    ("upper-push", "Upper Push", [
-        ("Dumbbell Bench Press", 3, 10, 15),
-        ("Incline Dumbbell Bench Press", 3, 10, 15),
-        ("Seated Dumbbell Shoulder Press", 3, 10, 10),
-        ("Cable Lateral Raise", 3, 10, 7.5),
-        ("Tricep Rope Pushdown", 3, 10, 17.5),
-        ("Overhead Rope Extension", 2, 10, 15),
-    ]),
-    ("lower", "Lower Body", [
-        ("Leg Press", 3, 10, 45),
-        ("Romanian Barbell Deadlift", 3, 10, 25),
-        ("Leg Curl", 3, 12, 20),
-        ("Leg Extension", 3, 12, 20),
-        ("Calf Raise", 3, 12, 20),
-    ]),
-    ("upper-pull", "Upper Pull", [
-        ("Lat Pulldown", 3, 10, 42.5),
-        ("Seated Cable Row", 3, 10, 30),
-        ("Dumbbell Row", 3, 10, 12.5),
-        ("Face Pull", 3, 12, 15),
-        ("Dumbbell Curl", 3, 10, 10),
-    ]),
-    ("full-body", "Full Body", [
-        ("Leg Press", 3, 10, 45),
-        ("Dumbbell Bench Press", 3, 10, 15),
-        ("Lat Pulldown", 3, 10, 42.5),
-        ("Romanian Barbell Deadlift", 3, 10, 25),
-        ("Cable Lateral Raise", 2, 12, 7.5),
-    ]),
-]
+def load_routine():
+    """Load the workout rotation from routine.json so it can be edited/regenerated
+    (e.g. weekly, from a chat prompt fed your logged history) without touching code."""
+    with open(ROUTINE_PATH) as handle:
+        plans = json.load(handle)
+    return [
+        (plan["key"], plan["name"], [
+            (ex["name"], ex["sets"], ex["reps"], ex["weight"]) for ex in plan["exercises"]
+        ])
+        for plan in plans
+    ]
+
+ROUTINE = load_routine()
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
@@ -63,6 +47,17 @@ CREATE TABLE IF NOT EXISTS sets (
 
 def now():
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+def format_completed(value):
+    """Render a stored completed_at value for display. Real timestamps become a
+    short date; the "Imported from chat" placeholder (no original date) passes through."""
+    try:
+        return datetime.fromisoformat(value).strftime("%-d %b %Y")
+    except (TypeError, ValueError):
+        return value
+
+def with_display_date(rows):
+    return [dict(row, completed_display=format_completed(row["completed_at"])) for row in rows]
 
 def db():
     if "db" not in g:
@@ -129,7 +124,7 @@ def short_exercises(exercises):
 def home():
     pending = db().execute("SELECT * FROM workouts WHERE status='pending' ORDER BY id LIMIT 1").fetchone()
     recent = db().execute("SELECT * FROM workouts WHERE status='complete' ORDER BY id DESC LIMIT 5").fetchall()
-    return render_template("home.html", pending=pending, recent=recent)
+    return render_template("home.html", pending=pending, recent=with_display_date(recent))
 
 @app.route("/workout/<int:workout_id>")
 def workout(workout_id):
@@ -166,7 +161,7 @@ def complete(workout_id):
 def history():
     workouts = db().execute("SELECT * FROM workouts WHERE status='complete' ORDER BY id DESC").fetchall()
     exercise_names = db().execute("SELECT DISTINCT e.name FROM exercises e JOIN workouts w ON w.id=e.workout_id WHERE w.status='complete' ORDER BY e.name").fetchall()
-    return render_template("history.html", workouts=workouts, exercise_names=exercise_names)
+    return render_template("history.html", workouts=with_display_date(workouts), exercise_names=exercise_names)
 
 @app.route("/history/exercise")
 def exercise_history():
@@ -174,6 +169,27 @@ def exercise_history():
     rows = db().execute("""SELECT w.name AS workout_name, w.completed_at, s.position, s.reps, s.weight
         FROM sets s JOIN exercises e ON e.id=s.exercise_id JOIN workouts w ON w.id=e.workout_id
         WHERE w.status='complete' AND e.name=? ORDER BY w.id DESC, s.position""", (name,)).fetchall()
-    return render_template("exercise_history.html", name=name, rows=rows)
+    return render_template("exercise_history.html", name=name, rows=with_display_date(rows))
+
+@app.route("/export")
+def export_history():
+    """Dump the current routine plus recent logged sets per exercise, as JSON, for
+    pasting into a chat LLM prompt to get an updated routine.json back (see
+    WEEKLY_PROMPT.md). No API keys or external calls involved."""
+    names = [row["name"] for row in db().execute(
+        "SELECT DISTINCT e.name FROM exercises e JOIN workouts w ON w.id=e.workout_id WHERE w.status='complete' ORDER BY e.name"
+    ).fetchall()]
+    history = {}
+    for name in names:
+        rows = db().execute("""SELECT w.completed_at, s.position, s.reps, s.weight
+            FROM sets s JOIN exercises e ON e.id=s.exercise_id JOIN workouts w ON w.id=e.workout_id
+            WHERE w.status='complete' AND e.name=? ORDER BY w.id DESC, s.position LIMIT 30""", (name,)).fetchall()
+        sessions = {}
+        for row in rows:
+            sessions.setdefault(row["completed_at"], []).append({"reps": row["reps"], "weight": row["weight"]})
+        history[name] = [{"completed_at": completed_at, "sets": sets} for completed_at, sets in sessions.items()]
+    with open(ROUTINE_PATH) as handle:
+        current_routine = json.load(handle)
+    return {"routine": current_routine, "history": history}
 
 if __name__ == "__main__": app.run(host="0.0.0.0", port=8000, debug=True)

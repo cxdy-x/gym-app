@@ -5,7 +5,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 GYM_DATA_DIR=/data
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py ./
+COPY app.py routine.json ./
 COPY templates ./templates
 COPY static ./static
 

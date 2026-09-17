@@ -37,7 +37,8 @@ docker compose up -d --build
 ```
 
 The workout rotation lives in `routine.json`, not in code, so you can hand-edit
-weights/reps any time — or see `WEEKLY_PROMPT.md` for a no-cost way to refresh
+weights/reps/exercises any time — or see `WEEKLY_PROMPT.md` for a no-cost way
+to refresh
 it weekly using a free chat LLM and your logged history, no API key needed.
 
 Back up `/mnt/gym-app/gym.db` while the service is stopped, or use SQLite's online backup mechanism. The database is the only essential persistent app data.

@@ -1,0 +1,544 @@
+diff --git a/README.md b/README.md
+index 50c183f..36271a6 100644
+--- a/README.md
++++ b/README.md
+@@ -37,7 +37,8 @@ docker compose up -d --build
+ ```
+ 
+ The workout rotation lives in `routine.json`, not in code, so you can hand-edit
+-weights/reps any time — or see `WEEKLY_PROMPT.md` for a no-cost way to refresh
++weights/reps/exercises any time — or see `WEEKLY_PROMPT.md` for a no-cost way
++to refresh
+ it weekly using a free chat LLM and your logged history, no API key needed.
+ 
+ Back up `/mnt/gym-app/gym.db` while the service is stopped, or use SQLite's online backup mechanism. The database is the only essential persistent app data.
+diff --git a/WEEKLY_PROMPT.md b/WEEKLY_PROMPT.md
+index 39c63d1..170c822 100644
+--- a/WEEKLY_PROMPT.md
++++ b/WEEKLY_PROMPT.md
+@@ -18,21 +18,62 @@ recent logged sets (reps/weight) per exercise.
+ ## 2. Paste this prompt into a chat LLM, then paste the JSON straight after it
+ 
+ ```
+-You are helping update a strength-training program using progressive overload.
++You are helping update a strength-training program using progressive overload,
++with occasional exercise variation.
+ 
+-Rules:
++Weight/rep progression rules:
+ - For each exercise, look at its most recent sessions in "history".
+ - If every set in the last 2 sessions hit or exceeded the exercise's target
+   reps, increase "weight" by roughly 2.5-5%, rounded to a sensible increment
+   for that kind of equipment (dumbbells often jump in 2.5kg steps; cables and
+-  machines can be finer).
++  machines can be finer; barbells usually jump in 2.5-5kg per side, i.e.
++  5-10kg total).
+ - If sets fell short of target reps, leave "weight" unchanged so the user can
+   work back up to it.
+ - If weight and reps have been flat for 3+ sessions with no missed reps,
+   increase "reps" by 1 instead (up to about 12-15) before the next weight
+   increase.
+-- Do not add, remove, reorder, or rename exercises or workout days. Only
+-  adjust "sets", "reps" and "weight".
++
++Exercise variation rules:
++- Most weeks, leave exercise selection unchanged — only adjust the numbers
++  above.
++- About once every 4-6 weeks, OR for any exercise whose weight has been
++  completely flat for 4+ consecutive sessions despite hitting target reps
++  (a plateau), you may swap ONE exercise in ONE workout for a different,
++  well-known gym exercise that targets the same muscle group/movement
++  pattern. Prefer the exercise pool below, but a different well-known
++  exercise for that same movement pattern is fine if nothing in the pool
++  fits.
++- Never swap more than one exercise across the whole routine in a single
++  update.
++- Keep the same four workout keys/names ("upper-push", "lower",
++  "upper-pull", "full-body") and the same number of exercises in each
++  workout — this is a straight swap, not an addition.
++- When you introduce an exercise with no history, pick a conservative
++  starting weight (estimate from a comparable movement already in the
++  history, erring low) and set reps to the low end of a sensible range
++  (e.g. 8-10) rather than guessing aggressively — the user will adjust
++  after the first session.
++- For bodyweight moves (e.g. pull-ups, dips) with no added load, set
++  "weight" to 0.
++
++Exercise pool (grouped by workout type — pick from here first when
++swapping, but not required if another popular exercise fits better):
++- upper-push: Barbell Bench Press, Dumbbell Bench Press, Incline Barbell
++  Bench Press, Incline Dumbbell Bench Press, Seated Dumbbell Shoulder
++  Press, Standing Overhead Barbell Press, Machine Chest Press, Dips,
++  Cable Lateral Raise, Dumbbell Lateral Raise, Tricep Rope Pushdown,
++  Overhead Rope Extension, Close-Grip Bench Press
++- lower: Barbell Back Squat, Front Squat, Leg Press, Romanian Barbell
++  Deadlift, Conventional Barbell Deadlift, Bulgarian Split Squat, Walking
++  Lunges, Hip Thrust, Leg Curl, Leg Extension, Calf Raise
++- upper-pull: Lat Pulldown, Pull-Up, Chin-Up, Seated Cable Row, Barbell
++  Row, Dumbbell Row, Face Pull, Barbell Curl, Dumbbell Curl, Preacher
++  Curl, Hammer Curl
++- full-body: draw 1-2 exercises from each of the pools above, favouring
++  compound lifts (squat/press/row/pulldown pattern)
++
++Output rules:
+ - Output ONLY a JSON array in exactly the same shape as the "routine" field
+   you were given: a list of {key, name, exercises: [{name, sets, reps,
+   weight}]}. No commentary, no markdown code fences, no explanation.
+@@ -43,15 +84,19 @@ Here is the current routine and recent history:
+ 
+ ## 3. Sanity-check the result
+ 
+-Before committing, make sure it's valid JSON and nothing structural changed
+-(same exercise names, same number of workouts):
++Before committing, make sure it's valid JSON and nothing structural broke
++(same 4 workouts, same exercise count per workout, and any swapped-in
++exercise actually makes sense for that workout's muscle group):
+ 
+ ```sh
+ python3 -m json.tool routine.json > /dev/null && echo OK
+ ```
+ 
+-If a suggested jump looks off for an exercise, just hand-edit that one number
+-in `routine.json` — you don't have to accept the whole thing as-is.
++If a suggested jump — or a swap — looks off, hand-edit `routine.json`
++directly. You don't have to accept the whole thing as-is. Brand-new
++exercises start with no logged history, which is expected — just treat the
++first session's numbers as a starting estimate and let the following week's
++export pick up real data for it.
+ 
+ ## 4. Commit and deploy
+ 
+@@ -68,3 +113,7 @@ cd /opt/gym-app
+ git pull
+ docker compose up -d --build
+ ```
++
++Note: a workout that's already *pending* when you deploy keeps whatever
++exercises it was created with — the new mix only shows up starting from the
++workout generated after you next complete one.
+diff --git a/gym-app-updates.patch b/gym-app-updates.patch
+deleted file mode 100644
+index 0065b43..0000000
+--- a/gym-app-updates.patch
++++ /dev/null
+@@ -1,420 +0,0 @@
+-diff --git a/Dockerfile b/Dockerfile
+-index e5b7e4a..0636f5a 100644
+---- a/Dockerfile
+-+++ b/Dockerfile
+-@@ -5,7 +5,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 GYM_DATA_DIR=/data
+- 
+- COPY requirements.txt .
+- RUN pip install --no-cache-dir -r requirements.txt
+--COPY app.py ./
+-+COPY app.py routine.json ./
+- COPY templates ./templates
+- COPY static ./static
+- 
+-diff --git a/README.md b/README.md
+-index 022df64..50c183f 100644
+---- a/README.md
+-+++ b/README.md
+-@@ -36,6 +36,10 @@ git pull
+- docker compose up -d --build
+- ```
+- 
+-+The workout rotation lives in `routine.json`, not in code, so you can hand-edit
+-+weights/reps any time — or see `WEEKLY_PROMPT.md` for a no-cost way to refresh
+-+it weekly using a free chat LLM and your logged history, no API key needed.
+-+
+- Back up `/mnt/gym-app/gym.db` while the service is stopped, or use SQLite's online backup mechanism. The database is the only essential persistent app data.
+- 
+- ## Security note
+-diff --git a/WEEKLY_PROMPT.md b/WEEKLY_PROMPT.md
+-new file mode 100644
+-index 0000000..39c63d1
+---- /dev/null
+-+++ b/WEEKLY_PROMPT.md
+-@@ -0,0 +1,70 @@
+-+# Weekly workout update (no API key, no cost)
+-+
+-+Do this once a week (or whenever you like) using any free chat LLM — Claude.ai,
+-+ChatGPT's free tier, etc. Nothing here talks to an API; you're just copying
+-+JSON in and out of a chat window by hand.
+-+
+-+## 1. Export your data
+-+
+-+Visit this in a browser, or `curl` it, from a machine on the home LAN:
+-+
+-+```
+-+http://10.0.0.10:2222/export
+-+```
+-+
+-+Copy the full JSON response. It contains your current `routine.json` plus your
+-+recent logged sets (reps/weight) per exercise.
+-+
+-+## 2. Paste this prompt into a chat LLM, then paste the JSON straight after it
+-+
+-+```
+-+You are helping update a strength-training program using progressive overload.
+-+
+-+Rules:
+-+- For each exercise, look at its most recent sessions in "history".
+-+- If every set in the last 2 sessions hit or exceeded the exercise's target
+-+  reps, increase "weight" by roughly 2.5-5%, rounded to a sensible increment
+-+  for that kind of equipment (dumbbells often jump in 2.5kg steps; cables and
+-+  machines can be finer).
+-+- If sets fell short of target reps, leave "weight" unchanged so the user can
+-+  work back up to it.
+-+- If weight and reps have been flat for 3+ sessions with no missed reps,
+-+  increase "reps" by 1 instead (up to about 12-15) before the next weight
+-+  increase.
+-+- Do not add, remove, reorder, or rename exercises or workout days. Only
+-+  adjust "sets", "reps" and "weight".
+-+- Output ONLY a JSON array in exactly the same shape as the "routine" field
+-+  you were given: a list of {key, name, exercises: [{name, sets, reps,
+-+  weight}]}. No commentary, no markdown code fences, no explanation.
+-+
+-+Here is the current routine and recent history:
+-+<paste the JSON from step 1 here>
+-+```
+-+
+-+## 3. Sanity-check the result
+-+
+-+Before committing, make sure it's valid JSON and nothing structural changed
+-+(same exercise names, same number of workouts):
+-+
+-+```sh
+-+python3 -m json.tool routine.json > /dev/null && echo OK
+-+```
+-+
+-+If a suggested jump looks off for an exercise, just hand-edit that one number
+-+in `routine.json` — you don't have to accept the whole thing as-is.
+-+
+-+## 4. Commit and deploy
+-+
+-+```sh
+-+git add routine.json
+-+git commit -m "Update routine weights"
+-+git push
+-+```
+-+
+-+Then on the server, same as any other update:
+-+
+-+```sh
+-+cd /opt/gym-app
+-+git pull
+-+docker compose up -d --build
+-+```
+-diff --git a/app.py b/app.py
+-index 6655379..9e93255 100644
+---- a/app.py
+-+++ b/app.py
+-@@ -1,3 +1,4 @@
+-+import json
+- import os
+- import sqlite3
+- from contextlib import closing
+-@@ -8,41 +9,24 @@ from flask import Flask, abort, flash, g, redirect, render_template, request, ur
+- 
+- DATA_DIR = Path(os.environ.get("GYM_DATA_DIR", "./data"))
+- DATABASE = DATA_DIR / "gym.db"
+-+ROUTINE_PATH = Path(os.environ.get("GYM_ROUTINE_FILE", "./routine.json"))
+- 
+- app = Flask(__name__)
+- app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-this-if-exposed-outside-your-home-network")
+- 
+--ROUTINE = [
+--    ("upper-push", "Upper Push", [
+--        ("Dumbbell Bench Press", 3, 10, 15),
+--        ("Incline Dumbbell Bench Press", 3, 10, 15),
+--        ("Seated Dumbbell Shoulder Press", 3, 10, 10),
+--        ("Cable Lateral Raise", 3, 10, 7.5),
+--        ("Tricep Rope Pushdown", 3, 10, 17.5),
+--        ("Overhead Rope Extension", 2, 10, 15),
+--    ]),
+--    ("lower", "Lower Body", [
+--        ("Leg Press", 3, 10, 45),
+--        ("Romanian Barbell Deadlift", 3, 10, 25),
+--        ("Leg Curl", 3, 12, 20),
+--        ("Leg Extension", 3, 12, 20),
+--        ("Calf Raise", 3, 12, 20),
+--    ]),
+--    ("upper-pull", "Upper Pull", [
+--        ("Lat Pulldown", 3, 10, 42.5),
+--        ("Seated Cable Row", 3, 10, 30),
+--        ("Dumbbell Row", 3, 10, 12.5),
+--        ("Face Pull", 3, 12, 15),
+--        ("Dumbbell Curl", 3, 10, 10),
+--    ]),
+--    ("full-body", "Full Body", [
+--        ("Leg Press", 3, 10, 45),
+--        ("Dumbbell Bench Press", 3, 10, 15),
+--        ("Lat Pulldown", 3, 10, 42.5),
+--        ("Romanian Barbell Deadlift", 3, 10, 25),
+--        ("Cable Lateral Raise", 2, 12, 7.5),
+--    ]),
+--]
+-+def load_routine():
+-+    """Load the workout rotation from routine.json so it can be edited/regenerated
+-+    (e.g. weekly, from a chat prompt fed your logged history) without touching code."""
+-+    with open(ROUTINE_PATH) as handle:
+-+        plans = json.load(handle)
+-+    return [
+-+        (plan["key"], plan["name"], [
+-+            (ex["name"], ex["sets"], ex["reps"], ex["weight"]) for ex in plan["exercises"]
+-+        ])
+-+        for plan in plans
+-+    ]
+-+
+-+ROUTINE = load_routine()
+- 
+- SCHEMA = """
+- CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
+-@@ -64,6 +48,17 @@ CREATE TABLE IF NOT EXISTS sets (
+- def now():
+-     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+- 
+-+def format_completed(value):
+-+    """Render a stored completed_at value for display. Real timestamps become a
+-+    short date; the "Imported from chat" placeholder (no original date) passes through."""
+-+    try:
+-+        return datetime.fromisoformat(value).strftime("%-d %b %Y")
+-+    except (TypeError, ValueError):
+-+        return value
+-+
+-+def with_display_date(rows):
+-+    return [dict(row, completed_display=format_completed(row["completed_at"])) for row in rows]
+-+
+- def db():
+-     if "db" not in g:
+-         DATA_DIR.mkdir(parents=True, exist_ok=True)
+-@@ -129,7 +124,7 @@ def short_exercises(exercises):
+- def home():
+-     pending = db().execute("SELECT * FROM workouts WHERE status='pending' ORDER BY id LIMIT 1").fetchone()
+-     recent = db().execute("SELECT * FROM workouts WHERE status='complete' ORDER BY id DESC LIMIT 5").fetchall()
+--    return render_template("home.html", pending=pending, recent=recent)
+-+    return render_template("home.html", pending=pending, recent=with_display_date(recent))
+- 
+- @app.route("/workout/<int:workout_id>")
+- def workout(workout_id):
+-@@ -166,7 +161,7 @@ def complete(workout_id):
+- def history():
+-     workouts = db().execute("SELECT * FROM workouts WHERE status='complete' ORDER BY id DESC").fetchall()
+-     exercise_names = db().execute("SELECT DISTINCT e.name FROM exercises e JOIN workouts w ON w.id=e.workout_id WHERE w.status='complete' ORDER BY e.name").fetchall()
+--    return render_template("history.html", workouts=workouts, exercise_names=exercise_names)
+-+    return render_template("history.html", workouts=with_display_date(workouts), exercise_names=exercise_names)
+- 
+- @app.route("/history/exercise")
+- def exercise_history():
+-@@ -174,6 +169,27 @@ def exercise_history():
+-     rows = db().execute("""SELECT w.name AS workout_name, w.completed_at, s.position, s.reps, s.weight
+-         FROM sets s JOIN exercises e ON e.id=s.exercise_id JOIN workouts w ON w.id=e.workout_id
+-         WHERE w.status='complete' AND e.name=? ORDER BY w.id DESC, s.position""", (name,)).fetchall()
+--    return render_template("exercise_history.html", name=name, rows=rows)
+-+    return render_template("exercise_history.html", name=name, rows=with_display_date(rows))
+-+
+-+@app.route("/export")
+-+def export_history():
+-+    """Dump the current routine plus recent logged sets per exercise, as JSON, for
+-+    pasting into a chat LLM prompt to get an updated routine.json back (see
+-+    WEEKLY_PROMPT.md). No API keys or external calls involved."""
+-+    names = [row["name"] for row in db().execute(
+-+        "SELECT DISTINCT e.name FROM exercises e JOIN workouts w ON w.id=e.workout_id WHERE w.status='complete' ORDER BY e.name"
+-+    ).fetchall()]
+-+    history = {}
+-+    for name in names:
+-+        rows = db().execute("""SELECT w.completed_at, s.position, s.reps, s.weight
+-+            FROM sets s JOIN exercises e ON e.id=s.exercise_id JOIN workouts w ON w.id=e.workout_id
+-+            WHERE w.status='complete' AND e.name=? ORDER BY w.id DESC, s.position LIMIT 30""", (name,)).fetchall()
+-+        sessions = {}
+-+        for row in rows:
+-+            sessions.setdefault(row["completed_at"], []).append({"reps": row["reps"], "weight": row["weight"]})
+-+        history[name] = [{"completed_at": completed_at, "sets": sets} for completed_at, sets in sessions.items()]
+-+    with open(ROUTINE_PATH) as handle:
+-+        current_routine = json.load(handle)
+-+    return {"routine": current_routine, "history": history}
+- 
+- if __name__ == "__main__": app.run(host="0.0.0.0", port=8000, debug=True)
+-diff --git a/routine.json b/routine.json
+-new file mode 100644
+-index 0000000..3df97a5
+---- /dev/null
+-+++ b/routine.json
+-@@ -0,0 +1,152 @@
+-+[
+-+  {
+-+    "key": "upper-push",
+-+    "name": "Upper Push",
+-+    "exercises": [
+-+      {
+-+        "name": "Dumbbell Bench Press",
+-+        "sets": 3,
+-+        "reps": 10,
+-+        "weight": 15
+-+      },
+-+      {
+-+        "name": "Incline Dumbbell Bench Press",
+-+        "sets": 3,
+-+        "reps": 10,
+-+        "weight": 15
+-+      },
+-+      {
+-+        "name": "Seated Dumbbell Shoulder Press",
+-+        "sets": 3,
+-+        "reps": 10,
+-+        "weight": 10
+-+      },
+-+      {
+-+        "name": "Cable Lateral Raise",
+-+        "sets": 3,
+-+        "reps": 10,
+-+        "weight": 7.5
+-+      },
+-+      {
+-+        "name": "Tricep Rope Pushdown",
+-+        "sets": 3,
+-+        "reps": 10,
+-+        "weight": 17.5
+-+      },
+-+      {
+-+        "name": "Overhead Rope Extension",
+-+        "sets": 2,
+-+        "reps": 10,
+-+        "weight": 15
+-+      }
+-+    ]
+-+  },
+-+  {
+-+    "key": "lower",
+-+    "name": "Lower Body",
+-+    "exercises": [
+-+      {
+-+        "name": "Leg Press",
+-+        "sets": 3,
+-+        "reps": 10,
+-+        "weight": 45
+-+      },
+-+      {
+-+        "name": "Romanian Barbell Deadlift",
+-+        "sets": 3,
+-+        "reps": 10,
+-+        "weight": 25
+-+      },
+-+      {
+-+        "name": "Leg Curl",
+-+        "sets": 3,
+-+        "reps": 12,
+-+        "weight": 20
+-+      },
+-+      {
+-+        "name": "Leg Extension",
+-+        "sets": 3,
+-+        "reps": 12,
+-+        "weight": 20
+-+      },
+-+      {
+-+        "name": "Calf Raise",
+-+        "sets": 3,
+-+        "reps": 12,
+-+        "weight": 20
+-+      }
+-+    ]
+-+  },
+-+  {
+-+    "key": "upper-pull",
+-+    "name": "Upper Pull",
+-+    "exercises": [
+-+      {
+-+        "name": "Lat Pulldown",
+-+        "sets": 3,
+-+        "reps": 10,
+-+        "weight": 42.5
+-+      },
+-+      {
+-+        "name": "Seated Cable Row",
+-+        "sets": 3,
+-+        "reps": 10,
+-+        "weight": 30
+-+      },
+-+      {
+-+        "name": "Dumbbell Row",
+-+        "sets": 3,
+-+        "reps": 10,
+-+        "weight": 12.5
+-+      },
+-+      {
+-+        "name": "Face Pull",
+-+        "sets": 3,
+-+        "reps": 12,
+-+        "weight": 15
+-+      },
+-+      {
+-+        "name": "Dumbbell Curl",
+-+        "sets": 3,
+-+        "reps": 10,
+-+        "weight": 10
+-+      }
+-+    ]
+-+  },
+-+  {
+-+    "key": "full-body",
+-+    "name": "Full Body",
+-+    "exercises": [
+-+      {
+-+        "name": "Leg Press",
+-+        "sets": 3,
+-+        "reps": 10,
+-+        "weight": 45
+-+      },
+-+      {
+-+        "name": "Dumbbell Bench Press",
+-+        "sets": 3,
+-+        "reps": 10,
+-+        "weight": 15
+-+      },
+-+      {
+-+        "name": "Lat Pulldown",
+-+        "sets": 3,
+-+        "reps": 10,
+-+        "weight": 42.5
+-+      },
+-+      {
+-+        "name": "Romanian Barbell Deadlift",
+-+        "sets": 3,
+-+        "reps": 10,
+-+        "weight": 25
+-+      },
+-+      {
+-+        "name": "Cable Lateral Raise",
+-+        "sets": 2,
+-+        "reps": 12,
+-+        "weight": 7.5
+-+      }
+-+    ]
+-+  }
+-+]
+-diff --git a/static/app.css b/static/app.css
+-index 15cbd4b..b8f8c9b 100644
+---- a/static/app.css
+-+++ b/static/app.css
+-@@ -1 +1 @@
+--:root{font-family:ui-rounded,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#eef8f0;background:#10261d}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:linear-gradient(135deg,#10261d,#193e2d)}header{display:flex;justify-content:space-between;align-items:center;max-width:720px;margin:auto;padding:22px 20px;color:#d9ff67}header a{color:inherit;text-decoration:none;font-weight:800;letter-spacing:.08em}nav a{font-size:.85rem;color:#fff;letter-spacing:0}main{max-width:720px;margin:auto;padding:18px 20px 48px}h1{font-size:2.25rem;line-height:1.05;margin:.2rem 0 1rem}h2{font-size:1.1rem;margin:1.6rem 0 .7rem}.eyebrow,.target{color:#b8cfc0;font-size:.88rem}.hero,.exercise,.list{background:#f5fbf5;color:#13281d;border-radius:18px;padding:20px;box-shadow:0 8px 24px #06130d55}.hero p{line-height:1.45}.button{display:block;border:0;border-radius:12px;background:#d9ff67;color:#122618;font-weight:800;text-align:center;text-decoration:none;padding:16px;margin-top:20px;font-size:1rem;width:100%}.complete{cursor:pointer}.exercise{margin:14px 0}.exercise h2{margin:0}.set{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:end;border-top:1px solid #d8e5dc;margin-top:12px;padding-top:12px}.set b{padding-bottom:11px}.set label{font-size:.75rem;color:#506359}input{display:block;width:100%;font:inherit;margin-top:4px;padding:11px 8px;border:1px solid #a6b9ab;border-radius:9px;color:#13281d;background:white}.list{padding:0;overflow:hidden}.list a{display:flex;justify-content:space-between;gap:12px;padding:17px;color:#13281d;text-decoration:none;border-bottom:1px solid #d8e5dc}.list a:last-child{border:0}.list span{font-size:.75rem;color:#506359;text-align:right}.notice{background:#d9ff67;color:#13281d;border-radius:12px;padding:12px;font-weight:600}@media(max-width:420px){main{padding:12px 14px 40px}header{padding:18px 14px}.set{grid-template-columns:74px 1fr 1fr}h1{font-size:2rem}}
+-+:root{font-family:ui-rounded,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#eef8f0;background:#10261d}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:linear-gradient(135deg,#10261d,#193e2d)}header{display:flex;justify-content:space-between;align-items:center;max-width:720px;margin:auto;padding:22px 20px;color:#d9ff67}header a{color:inherit;text-decoration:none;font-weight:800;letter-spacing:.08em}nav a{font-size:.85rem;color:#fff;letter-spacing:0}main{max-width:720px;margin:auto;padding:18px 20px 48px}h1{font-size:2.25rem;line-height:1.05;margin:.2rem 0 1rem}h2{font-size:1.1rem;margin:1.6rem 0 .7rem}.eyebrow,.target{color:#b8cfc0;font-size:.88rem}.hero,.exercise,.list{background:#f5fbf5;color:#13281d;border-radius:18px;padding:20px;box-shadow:0 8px 24px #06130d55}.hero p{line-height:1.45}.button{display:block;border:0;border-radius:12px;background:#d9ff67;color:#122618;font-weight:800;text-align:center;text-decoration:none;padding:16px;margin-top:20px;font-size:1rem;width:100%}.complete{cursor:pointer}.exercise{margin:14px 0}.exercise h2{margin:0}.set{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:end;border-top:1px solid #d8e5dc;margin-top:12px;padding-top:12px}.set b{padding-bottom:11px}.set label{font-size:.75rem;color:#506359}input{display:block;width:100%;font:inherit;margin-top:4px;padding:11px 8px;border:1px solid #a6b9ab;border-radius:9px;color:#13281d;background:white}.list{padding:0;overflow:hidden}.list a{display:flex;justify-content:space-between;gap:12px;padding:17px;color:#13281d;text-decoration:none;border-bottom:1px solid #d8e5dc}.list a:last-child{border:0}.list span{font-size:.75rem;color:#506359;text-align:right}.history-row{display:flex;flex-direction:column;gap:4px;padding:17px;border-bottom:1px solid #d8e5dc}.history-row:last-child{border:0}.history-date{font-size:.75rem;color:#506359;text-transform:uppercase;letter-spacing:.03em}.history-detail{font-size:.95rem;line-height:1.4;word-break:break-word}.notice{background:#d9ff67;color:#13281d;border-radius:12px;padding:12px;font-weight:600}@media(max-width:420px){main{padding:12px 14px 40px}header{padding:18px 14px}.set{grid-template-columns:74px 1fr 1fr}h1{font-size:2rem}}
+-diff --git a/templates/exercise_history.html b/templates/exercise_history.html
+-index dc13211..221b623 100644
+---- a/templates/exercise_history.html
+-+++ b/templates/exercise_history.html
+-@@ -1 +1 @@
+--{% extends 'base.html' %}{% block content %}<p class="eyebrow">Progress by set</p><h1>{{ name }}</h1><section class="list">{% for row in rows %}<div class="history-row"><strong>{{ row.completed_at }}</strong><span>{{ row.workout_name }} · Set {{ row.position }}: {{ row.reps }} reps × {{ row.weight }} kg</span></div>{% else %}<p>No completed sets yet.</p>{% endfor %}</section>{% endblock %}
+-+{% extends 'base.html' %}{% block content %}<p class="eyebrow">Progress by set</p><h1>{{ name }}</h1><section class="list">{% for row in rows %}<div class="history-row"><strong class="history-date">{{ row.completed_display }}</strong><span class="history-detail">{{ row.workout_name }} · Set {{ row.position }}: {{ row.reps }} reps × {{ row.weight }} kg</span></div>{% else %}<p>No completed sets yet.</p>{% endfor %}</section>{% endblock %}
+-diff --git a/templates/history.html b/templates/history.html
+-index 90ff3df..b70056e 100644
+---- a/templates/history.html
+-+++ b/templates/history.html
+-@@ -1 +1 @@
+--{% extends 'base.html' %}{% block content %}<p class="eyebrow">Every completed session</p><h1>History</h1><h2>Exercise history</h2><section class="list">{% for item in exercise_names %}<a href="{{ url_for('exercise_history', name=item.name) }}"><strong>{{ item.name }}</strong><span>View sets</span></a>{% endfor %}</section><h2>Workouts</h2><section class="list">{% for w in workouts %}<a href="{{ url_for('workout', workout_id=w.id) }}"><strong>{{ w.name }}</strong><span>{{ w.completed_at }}</span></a>{% endfor %}</section>{% endblock %}
+-+{% extends 'base.html' %}{% block content %}<p class="eyebrow">Every completed session</p><h1>History</h1><h2>Exercise history</h2><section class="list">{% for item in exercise_names %}<a href="{{ url_for('exercise_history', name=item.name) }}"><strong>{{ item.name }}</strong><span>View sets</span></a>{% endfor %}</section><h2>Workouts</h2><section class="list">{% for w in workouts %}<a href="{{ url_for('workout', workout_id=w.id) }}"><strong>{{ w.name }}</strong><span>{{ w.completed_display }}</span></a>{% endfor %}</section>{% endblock %}
+-diff --git a/templates/home.html b/templates/home.html
+-index 2ff6439..f33b6f0 100644
+---- a/templates/home.html
+-+++ b/templates/home.html
+-@@ -1 +1 @@
+--{% extends 'base.html' %}{% block content %}<p class="eyebrow">Your current workout</p>{% if pending %}<section class="hero"><h1>{{ pending.name }}</h1><p>Choose your session length. This workout stays pending until you complete it.</p><a class="button" href="{{ url_for('workout', workout_id=pending.id, mode='quick') }}">Quick workout</a><a class="button secondary" href="{{ url_for('workout', workout_id=pending.id, mode='long') }}">Long workout</a></section>{% endif %}<h2>Recent history</h2><section class="list">{% for w in recent %}<a href="{{ url_for('workout', workout_id=w.id) }}"><strong>{{ w.name }}</strong><span>{{ w.completed_at }}</span></a>{% else %}<p>No workouts logged yet.</p>{% endfor %}</section>{% endblock %}
+-+{% extends 'base.html' %}{% block content %}<p class="eyebrow">Your current workout</p>{% if pending %}<section class="hero"><h1>{{ pending.name }}</h1><p>Choose your session length. This workout stays pending until you complete it.</p><a class="button" href="{{ url_for('workout', workout_id=pending.id, mode='quick') }}">Quick workout</a><a class="button secondary" href="{{ url_for('workout', workout_id=pending.id, mode='long') }}">Long workout</a></section>{% endif %}<h2>Recent history</h2><section class="list">{% for w in recent %}<a href="{{ url_for('workout', workout_id=w.id) }}"><strong>{{ w.name }}</strong><span>{{ w.completed_display }}</span></a>{% else %}<p>No workouts logged yet.</p>{% endfor %}</section>{% endblock %}

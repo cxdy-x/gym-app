@@ -46,8 +46,8 @@ Exercise variation rules:
   fits.
 - Never swap more than one exercise across the whole routine in a single
   update.
-- Keep the same four workout keys/names ("upper-push", "lower",
-  "upper-pull", "full-body") and the same number of exercises in each
+- Keep the same six workout keys/names ("push-a", "pull-a", "legs-a",
+  "push-b", "pull-b", "legs-b") and the same number of exercises in each
   workout — this is a straight swap, not an addition.
 - When you introduce an exercise with no history, pick a conservative
   starting weight (estimate from a comparable movement already in the
@@ -57,21 +57,20 @@ Exercise variation rules:
 - For bodyweight moves (e.g. pull-ups, dips) with no added load, set
   "weight" to 0.
 
-Exercise pool (grouped by workout type — pick from here first when
-swapping, but not required if another popular exercise fits better):
-- upper-push: Barbell Bench Press, Dumbbell Bench Press, Incline Barbell
+Exercise pool (grouped by day type — applies to both the A and B variant of
+each; pick from here first when swapping, but not required if another
+popular exercise fits better):
+- push: Barbell Bench Press, Dumbbell Bench Press, Incline Barbell
   Bench Press, Incline Dumbbell Bench Press, Seated Dumbbell Shoulder
   Press, Standing Overhead Barbell Press, Machine Chest Press, Dips,
   Cable Lateral Raise, Dumbbell Lateral Raise, Tricep Rope Pushdown,
   Overhead Rope Extension, Close-Grip Bench Press
-- lower: Barbell Back Squat, Front Squat, Leg Press, Romanian Barbell
+- legs: Barbell Back Squat, Front Squat, Leg Press, Romanian Barbell
   Deadlift, Conventional Barbell Deadlift, Bulgarian Split Squat, Walking
   Lunges, Hip Thrust, Leg Curl, Leg Extension, Calf Raise
-- upper-pull: Lat Pulldown, Pull-Up, Chin-Up, Seated Cable Row, Barbell
+- pull: Lat Pulldown, Pull-Up, Chin-Up, Seated Cable Row, Barbell
   Row, Dumbbell Row, Face Pull, Barbell Curl, Dumbbell Curl, Preacher
   Curl, Hammer Curl
-- full-body: draw 1-2 exercises from each of the pools above, favouring
-  compound lifts (squat/press/row/pulldown pattern)
 
 Output rules:
 - Output ONLY a JSON array in exactly the same shape as the "routine" field
@@ -85,7 +84,7 @@ Here is the current routine and recent history:
 ## 3. Sanity-check the result
 
 Before committing, make sure it's valid JSON and nothing structural broke
-(same 4 workouts, same exercise count per workout, and any swapped-in
+(same 6 workouts, same exercise count per workout, and any swapped-in
 exercise actually makes sense for that workout's muscle group):
 
 ```sh

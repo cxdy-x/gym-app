@@ -1,152 +1,70 @@
 [
   {
-    "key": "upper-push",
-    "name": "Upper Push",
+    "key": "push-a",
+    "name": "Push A",
     "exercises": [
-      {
-        "name": "Dumbbell Bench Press",
-        "sets": 3,
-        "reps": 10,
-        "weight": 15
-      },
-      {
-        "name": "Incline Dumbbell Bench Press",
-        "sets": 3,
-        "reps": 10,
-        "weight": 15
-      },
-      {
-        "name": "Seated Dumbbell Shoulder Press",
-        "sets": 3,
-        "reps": 10,
-        "weight": 10
-      },
-      {
-        "name": "Cable Lateral Raise",
-        "sets": 3,
-        "reps": 10,
-        "weight": 7.5
-      },
-      {
-        "name": "Tricep Rope Pushdown",
-        "sets": 3,
-        "reps": 10,
-        "weight": 17.5
-      },
-      {
-        "name": "Overhead Rope Extension",
-        "sets": 2,
-        "reps": 10,
-        "weight": 15
-      }
+      {"name": "Dumbbell Bench Press", "sets": 3, "reps": 10, "weight": 15},
+      {"name": "Incline Dumbbell Bench Press", "sets": 3, "reps": 10, "weight": 15},
+      {"name": "Seated Dumbbell Shoulder Press", "sets": 3, "reps": 10, "weight": 10},
+      {"name": "Cable Lateral Raise", "sets": 3, "reps": 10, "weight": 7.5},
+      {"name": "Tricep Rope Pushdown", "sets": 3, "reps": 10, "weight": 17.5},
+      {"name": "Overhead Rope Extension", "sets": 2, "reps": 10, "weight": 15}
     ]
   },
   {
-    "key": "lower",
-    "name": "Lower Body",
+    "key": "pull-a",
+    "name": "Pull A",
     "exercises": [
-      {
-        "name": "Leg Press",
-        "sets": 3,
-        "reps": 10,
-        "weight": 45
-      },
-      {
-        "name": "Romanian Barbell Deadlift",
-        "sets": 3,
-        "reps": 10,
-        "weight": 25
-      },
-      {
-        "name": "Leg Curl",
-        "sets": 3,
-        "reps": 12,
-        "weight": 20
-      },
-      {
-        "name": "Leg Extension",
-        "sets": 3,
-        "reps": 12,
-        "weight": 20
-      },
-      {
-        "name": "Calf Raise",
-        "sets": 3,
-        "reps": 12,
-        "weight": 20
-      }
+      {"name": "Lat Pulldown", "sets": 3, "reps": 10, "weight": 42.5},
+      {"name": "Seated Cable Row", "sets": 3, "reps": 10, "weight": 30},
+      {"name": "Dumbbell Row", "sets": 3, "reps": 10, "weight": 12.5},
+      {"name": "Face Pull", "sets": 3, "reps": 12, "weight": 15},
+      {"name": "Dumbbell Curl", "sets": 3, "reps": 10, "weight": 10}
     ]
   },
   {
-    "key": "upper-pull",
-    "name": "Upper Pull",
+    "key": "legs-a",
+    "name": "Legs A",
     "exercises": [
-      {
-        "name": "Lat Pulldown",
-        "sets": 3,
-        "reps": 10,
-        "weight": 42.5
-      },
-      {
-        "name": "Seated Cable Row",
-        "sets": 3,
-        "reps": 10,
-        "weight": 30
-      },
-      {
-        "name": "Dumbbell Row",
-        "sets": 3,
-        "reps": 10,
-        "weight": 12.5
-      },
-      {
-        "name": "Face Pull",
-        "sets": 3,
-        "reps": 12,
-        "weight": 15
-      },
-      {
-        "name": "Dumbbell Curl",
-        "sets": 3,
-        "reps": 10,
-        "weight": 10
-      }
+      {"name": "Barbell Back Squat", "sets": 3, "reps": 10, "weight": 30},
+      {"name": "Romanian Barbell Deadlift", "sets": 3, "reps": 10, "weight": 25},
+      {"name": "Leg Curl", "sets": 3, "reps": 12, "weight": 20},
+      {"name": "Leg Extension", "sets": 3, "reps": 12, "weight": 20},
+      {"name": "Calf Raise", "sets": 3, "reps": 12, "weight": 20}
     ]
   },
   {
-    "key": "full-body",
-    "name": "Full Body",
+    "key": "push-b",
+    "name": "Push B",
     "exercises": [
-      {
-        "name": "Leg Press",
-        "sets": 3,
-        "reps": 10,
-        "weight": 45
-      },
-      {
-        "name": "Dumbbell Bench Press",
-        "sets": 3,
-        "reps": 10,
-        "weight": 15
-      },
-      {
-        "name": "Lat Pulldown",
-        "sets": 3,
-        "reps": 10,
-        "weight": 42.5
-      },
-      {
-        "name": "Romanian Barbell Deadlift",
-        "sets": 3,
-        "reps": 10,
-        "weight": 25
-      },
-      {
-        "name": "Cable Lateral Raise",
-        "sets": 2,
-        "reps": 12,
-        "weight": 7.5
-      }
+      {"name": "Barbell Bench Press", "sets": 3, "reps": 10, "weight": 30},
+      {"name": "Standing Overhead Barbell Press", "sets": 3, "reps": 10, "weight": 20},
+      {"name": "Dips", "sets": 3, "reps": 10, "weight": 0},
+      {"name": "Dumbbell Lateral Raise", "sets": 3, "reps": 10, "weight": 7.5},
+      {"name": "Tricep Rope Pushdown", "sets": 3, "reps": 10, "weight": 17.5},
+      {"name": "Overhead Rope Extension", "sets": 2, "reps": 10, "weight": 15}
+    ]
+  },
+  {
+    "key": "pull-b",
+    "name": "Pull B",
+    "exercises": [
+      {"name": "Pull-Up", "sets": 3, "reps": 8, "weight": 0},
+      {"name": "Barbell Row", "sets": 3, "reps": 10, "weight": 30},
+      {"name": "Face Pull", "sets": 3, "reps": 12, "weight": 15},
+      {"name": "Preacher Curl", "sets": 3, "reps": 10, "weight": 10},
+      {"name": "Barbell Curl", "sets": 3, "reps": 10, "weight": 15}
+    ]
+  },
+  {
+    "key": "legs-b",
+    "name": "Legs B",
+    "exercises": [
+      {"name": "Leg Press", "sets": 3, "reps": 10, "weight": 45},
+      {"name": "Bulgarian Split Squat", "sets": 3, "reps": 10, "weight": 12.5},
+      {"name": "Hip Thrust", "sets": 3, "reps": 10, "weight": 30},
+      {"name": "Leg Extension", "sets": 3, "reps": 12, "weight": 20},
+      {"name": "Calf Raise", "sets": 3, "reps": 12, "weight": 20}
     ]
   }
 ]

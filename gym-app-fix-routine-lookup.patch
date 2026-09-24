@@ -1,0 +1,13 @@
+diff --git a/app.py b/app.py
+index 9e93255..0bede0c 100644
+--- a/app.py
++++ b/app.py
+@@ -150,7 +150,7 @@ def complete(workout_id):
+                 return redirect(url_for("workout", workout_id=workout_id))
+             db().execute("INSERT INTO sets (exercise_id,position,reps,weight) VALUES (?,?,?,?)", (ex["id"], number, reps, weight))
+     db().execute("UPDATE workouts SET status='complete', completed_at=? WHERE id=?", (now(), workout_id))
+-    index = next(i for i, plan in enumerate(ROUTINE) if plan[0] == workout["routine_key"])
++    index = next((i for i, plan in enumerate(ROUTINE) if plan[0] == workout["routine_key"]), -1)
+     key, name, plan = ROUTINE[(index + 1) % len(ROUTINE)]
+     add_workout(db(), key, name, [(n,s,r,w,[]) for n,s,r,w in plan])
+     db().commit()

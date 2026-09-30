@@ -1,0 +1,19 @@
+{
+  "push": [
+    "Barbell Bench Press", "Dumbbell Bench Press", "Incline Barbell Bench Press",
+    "Incline Dumbbell Bench Press", "Seated Dumbbell Shoulder Press",
+    "Standing Overhead Barbell Press", "Machine Chest Press", "Dips",
+    "Close-Grip Bench Press", "Cable Lateral Raise", "Dumbbell Lateral Raise",
+    "Tricep Rope Pushdown", "Overhead Rope Extension"
+  ],
+  "legs": [
+    "Barbell Back Squat", "Front Squat", "Leg Press", "Romanian Barbell Deadlift",
+    "Conventional Barbell Deadlift", "Bulgarian Split Squat", "Walking Lunges",
+    "Hip Thrust", "Leg Curl", "Leg Extension", "Calf Raise"
+  ],
+  "pull": [
+    "Lat Pulldown", "Pull-Up", "Chin-Up", "Seated Cable Row", "Barbell Row",
+    "Dumbbell Row", "Face Pull", "Barbell Curl", "Dumbbell Curl",
+    "Preacher Curl", "Hammer Curl"
+  ]
+}

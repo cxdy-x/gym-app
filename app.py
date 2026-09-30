@@ -10,6 +10,7 @@ from flask import Flask, abort, flash, g, redirect, render_template, request, ur
 DATA_DIR = Path(os.environ.get("GYM_DATA_DIR", "./data"))
 DATABASE = DATA_DIR / "gym.db"
 ROUTINE_PATH = Path(os.environ.get("GYM_ROUTINE_FILE", "./routine.json"))
+CATALOG_PATH = Path(os.environ.get("GYM_EXERCISES_FILE", "./exercises.json"))
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "change-this-if-exposed-outside-your-home-network")
@@ -28,6 +29,13 @@ def load_routine():
 
 ROUTINE = load_routine()
 
+def load_catalog():
+    """Exercise names offered in the swap/add dropdowns, grouped by day type."""
+    with open(CATALOG_PATH) as handle:
+        return json.load(handle)
+
+CATALOG = load_catalog()
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS workouts (
@@ -37,7 +45,8 @@ CREATE TABLE IF NOT EXISTS workouts (
 );
 CREATE TABLE IF NOT EXISTS exercises (
   id INTEGER PRIMARY KEY, workout_id INTEGER NOT NULL REFERENCES workouts(id) ON DELETE CASCADE,
-  position INTEGER NOT NULL, name TEXT NOT NULL, target_sets INTEGER, target_reps INTEGER, target_weight REAL
+  position INTEGER NOT NULL, name TEXT NOT NULL, target_sets INTEGER, target_reps INTEGER, target_weight REAL,
+  added INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS sets (
   id INTEGER PRIMARY KEY, exercise_id INTEGER NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
@@ -105,6 +114,12 @@ def migrate_and_seed():
         key, name, exercises = ROUTINE[0]
         add_workout(connection, key, name, [(n,s,r,w,[]) for n,s,r,w in exercises])
         connection.execute("INSERT INTO schema_migrations (version,applied_at) VALUES (1,?)", (now(),))
+    if not connection.execute("SELECT 1 FROM schema_migrations WHERE version=2").fetchone():
+        # Pre-existing databases were created before the "added" column existed.
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(exercises)").fetchall()}
+        if "added" not in columns:
+            connection.execute("ALTER TABLE exercises ADD COLUMN added INTEGER NOT NULL DEFAULT 0")
+        connection.execute("INSERT INTO schema_migrations (version,applied_at) VALUES (2,?)", (now(),))
     connection.commit()
 
 @app.before_request
@@ -117,8 +132,15 @@ def workout_detail(workout_id):
     return workout, [(ex, db().execute("SELECT * FROM sets WHERE exercise_id=? ORDER BY position", (ex["id"],)).fetchall()) for ex in exercises]
 
 def short_exercises(exercises):
-    # A quick session retains the main compound lifts and first accessory.
-    return exercises[:min(3, len(exercises))]
+    # A quick session keeps the first 3 planned exercises, plus anything added mid-session.
+    planned = [item for item in exercises if not item[0]["added"]]
+    extra = [item for item in exercises if item[0]["added"]]
+    return planned[:min(3, len(planned))] + extra
+
+def last_known_weight(name):
+    row = db().execute("""SELECT s.weight FROM sets s JOIN exercises e ON e.id=s.exercise_id JOIN workouts w ON w.id=e.workout_id
+        WHERE w.status='complete' AND e.name=? ORDER BY w.id DESC, s.position DESC LIMIT 1""", (name,)).fetchone()
+    return row["weight"] if row else 0
 
 @app.route("/")
 def home():
@@ -130,7 +152,31 @@ def home():
 def workout(workout_id):
     item, exercises = workout_detail(workout_id)
     mode = request.args.get("mode", "long")
-    return render_template("workout.html", workout=item, exercises=short_exercises(exercises) if mode == "quick" else exercises, mode=mode)
+    return render_template("workout.html", workout=item, exercises=short_exercises(exercises) if mode == "quick" else exercises, mode=mode, catalog=CATALOG)
+
+@app.route("/workout/<int:workout_id>/exercise/<int:exercise_id>/swap", methods=["POST"])
+def swap_exercise(workout_id, exercise_id):
+    workout, _ = workout_detail(workout_id)
+    if workout["status"] == "complete": return redirect(url_for("history"))
+    ex = db().execute("SELECT * FROM exercises WHERE id=? AND workout_id=?", (exercise_id, workout_id)).fetchone()
+    if not ex: abort(404)
+    name = request.form.get("name", "").strip()
+    if name:
+        db().execute("UPDATE exercises SET name=?, target_weight=? WHERE id=?", (name, last_known_weight(name), exercise_id))
+        db().commit()
+    return redirect(url_for("workout", workout_id=workout_id, mode=request.form.get("mode", "long")))
+
+@app.route("/workout/<int:workout_id>/add-exercise", methods=["POST"])
+def add_exercise(workout_id):
+    workout, exercises = workout_detail(workout_id)
+    if workout["status"] == "complete": return redirect(url_for("history"))
+    name = request.form.get("name", "").strip()
+    if name:
+        next_position = max((ex["position"] for ex, _ in exercises), default=0) + 1
+        db().execute("""INSERT INTO exercises (workout_id,position,name,target_sets,target_reps,target_weight,added)
+            VALUES (?,?,?,?,?,?,1)""", (workout_id, next_position, name, 3, 10, last_known_weight(name)))
+        db().commit()
+    return redirect(url_for("workout", workout_id=workout_id, mode=request.form.get("mode", "long")))
 
 @app.route("/workout/<int:workout_id>/complete", methods=["POST"])
 def complete(workout_id):

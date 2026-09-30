@@ -68,6 +68,22 @@ def format_completed(value):
 def with_display_date(rows):
     return [dict(row, completed_display=format_completed(row["completed_at"])) for row in rows]
 
+def chart_points(rows):
+    """One point per real-dated session: the top-weight set that day (weight + its
+    reps). Rows with no parseable date (e.g. the "Imported from chat" placeholder)
+    have nothing to plot on a time axis, so they're skipped here."""
+    sessions = {}
+    for row in rows:
+        try:
+            dt = datetime.fromisoformat(row["completed_at"])
+        except (TypeError, ValueError):
+            continue
+        best = sessions.get(row["completed_at"])
+        if best is None or row["weight"] >= best["weight"]:
+            sessions[row["completed_at"]] = {"date": dt, "weight": row["weight"], "reps": row["reps"]}
+    ordered = sorted(sessions.values(), key=lambda s: s["date"])
+    return [{"date": s["date"].strftime("%-d %b"), "weight": s["weight"], "reps": s["reps"]} for s in ordered]
+
 def db():
     if "db" not in g:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -139,7 +155,8 @@ def short_exercises(exercises):
 
 def last_known_weight(name):
     row = db().execute("""SELECT s.weight FROM sets s JOIN exercises e ON e.id=s.exercise_id JOIN workouts w ON w.id=e.workout_id
-        WHERE w.status='complete' AND e.name=? ORDER BY w.id DESC, s.position DESC LIMIT 1""", (name,)).fetchone()
+        WHERE w.status='complete' AND e.name=? AND NOT (s.reps=0 AND s.weight=0)
+        ORDER BY w.id DESC, s.position DESC LIMIT 1""", (name,)).fetchone()
     return row["weight"] if row else 0
 
 @app.route("/")
@@ -214,8 +231,9 @@ def exercise_history():
     name = request.args.get("name", "")
     rows = db().execute("""SELECT w.name AS workout_name, w.completed_at, s.position, s.reps, s.weight
         FROM sets s JOIN exercises e ON e.id=s.exercise_id JOIN workouts w ON w.id=e.workout_id
-        WHERE w.status='complete' AND e.name=? ORDER BY w.id DESC, s.position""", (name,)).fetchall()
-    return render_template("exercise_history.html", name=name, rows=with_display_date(rows))
+        WHERE w.status='complete' AND e.name=? AND NOT (s.reps=0 AND s.weight=0)
+        ORDER BY w.id DESC, s.position""", (name,)).fetchall()
+    return render_template("exercise_history.html", name=name, rows=with_display_date(rows), chart_data=chart_points(rows))
 
 @app.route("/export")
 def export_history():
@@ -229,7 +247,8 @@ def export_history():
     for name in names:
         rows = db().execute("""SELECT w.completed_at, s.position, s.reps, s.weight
             FROM sets s JOIN exercises e ON e.id=s.exercise_id JOIN workouts w ON w.id=e.workout_id
-            WHERE w.status='complete' AND e.name=? ORDER BY w.id DESC, s.position LIMIT 30""", (name,)).fetchall()
+            WHERE w.status='complete' AND e.name=? AND NOT (s.reps=0 AND s.weight=0)
+            ORDER BY w.id DESC, s.position LIMIT 30""", (name,)).fetchall()
         sessions = {}
         for row in rows:
             sessions.setdefault(row["completed_at"], []).append({"reps": row["reps"], "weight": row["weight"]})

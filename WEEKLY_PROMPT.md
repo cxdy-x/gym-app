@@ -71,6 +71,9 @@ popular exercise fits better):
 - pull: Lat Pulldown, Pull-Up, Chin-Up, Seated Cable Row, Barbell
   Row, Dumbbell Row, Face Pull, Barbell Curl, Dumbbell Curl, Preacher
   Curl, Hammer Curl
+- core: Ab Crunches (bodyweight, so weight 0; the user adds this one
+  in-session as an optional extra, so leave it out of the routine unless
+  it is already there)
 
 Output rules:
 - Output ONLY a JSON array in exactly the same shape as the "routine" field

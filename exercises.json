@@ -15,5 +15,8 @@
     "Lat Pulldown", "Pull-Up", "Chin-Up", "Seated Cable Row", "Barbell Row",
     "Dumbbell Row", "Face Pull", "Barbell Curl", "Dumbbell Curl",
     "Preacher Curl", "Hammer Curl"
+  ],
+  "core": [
+    "Ab Crunches"
   ]
 }

@@ -195,6 +195,15 @@ def add_exercise(workout_id):
         db().commit()
     return redirect(url_for("workout", workout_id=workout_id, mode=request.form.get("mode", "long")))
 
+def submitted_sets(exercise_id):
+    """Sets the page submitted for one exercise. Sets can be added or removed
+    on the workout page, so read however many rows came through (1, 2, 3...)."""
+    found, number = [], 1
+    while number <= 30 and (f"reps-{exercise_id}-{number}" in request.form or f"weight-{exercise_id}-{number}" in request.form):
+        found.append((number, request.form.get(f"reps-{exercise_id}-{number}", type=int), request.form.get(f"weight-{exercise_id}-{number}", type=float)))
+        number += 1
+    return found
+
 @app.route("/workout/<int:workout_id>/complete", methods=["POST"])
 def complete(workout_id):
     workout, exercises = workout_detail(workout_id)
@@ -204,14 +213,19 @@ def complete(workout_id):
     if not selected:
         flash("Choose at least one exercise before completing.")
         return redirect(url_for("workout", workout_id=workout_id))
+    entries = []
     for ex, _sets in selected:
-        for number in range(1, ex["target_sets"] + 1):
-            reps = request.form.get(f"reps-{ex['id']}-{number}", type=int)
-            weight = request.form.get(f"weight-{ex['id']}-{number}", type=float)
+        submitted = submitted_sets(ex["id"])
+        if not submitted:
+            flash(f"{ex['name']} needs at least one set before completing.")
+            return redirect(url_for("workout", workout_id=workout_id))
+        for number, reps, weight in submitted:
             if reps is None or weight is None or reps < 0 or weight < 0:
                 flash("Every set needs non-negative reps and weight before completing.")
                 return redirect(url_for("workout", workout_id=workout_id))
-            db().execute("INSERT INTO sets (exercise_id,position,reps,weight) VALUES (?,?,?,?)", (ex["id"], number, reps, weight))
+            entries.append((ex["id"], number, reps, weight))
+    for entry in entries:
+        db().execute("INSERT INTO sets (exercise_id,position,reps,weight) VALUES (?,?,?,?)", entry)
     db().execute("UPDATE workouts SET status='complete', completed_at=? WHERE id=?", (now(), workout_id))
     index = next((i for i, plan in enumerate(ROUTINE) if plan[0] == workout["routine_key"]), -1)
     key, name, plan = ROUTINE[(index + 1) % len(ROUTINE)]
